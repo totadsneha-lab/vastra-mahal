@@ -12,7 +12,7 @@ import {
   ChevronRight,
 } from "lucide-react";
 
-import logo from 'C:\Users\Dell\Desktop\vastra-mahal\app\components\images\logo.png';
+import logo from './images/logo.png';
 
 /* ------------------------------------------------------------------
    DESIGN TOKENS
