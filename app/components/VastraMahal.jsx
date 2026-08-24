@@ -1,5 +1,6 @@
 "use client";
-import React, { useState, useMemo } from "react";
+
+import React, { useState, useMemo, useEffect } from "react";
 import {
   Search,
   SlidersHorizontal,
@@ -11,15 +12,10 @@ import {
   Trash2,
   ChevronRight,
 } from "lucide-react";
-
-import logo from './images/logo.png';
+import logo from "./images/logo.png";
 
 /* ------------------------------------------------------------------
    DESIGN TOKENS
-   Ivory ground, deep maroon + antique gold + crimson accent.
-   Signature element: a hand-drawn "gopuram" (temple-tower) border
-   motif, echoing the woven zari borders on a Kanjeevaram/Banarasi
-   saree — used as a real structural divider, not decoration.
 ------------------------------------------------------------------- */
 const INK = "#2B2320";
 const IVORY = "#FBF6EE";
@@ -30,34 +26,32 @@ const GOLD = "#B08328";
 const GOLD_SOFT = "#D9B978";
 const CRIMSON = "#A22C2C";
 
+// ⚠️ Replace with your real WhatsApp Business number (country code + number, digits only)
+const WHATSAPP_NUMBER = "919148909543";
+
+// Your live site link — used in the WhatsApp order message
+const SITE_URL = "https://vastra-mahal.vercel.app";
+
 const FONTS = `
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Manrope:wght@400;500;600;700&display=swap');
 `;
 
-/* Category → swatch gradient + weave color, standing in for photography
-   with a woven-texture treatment instead of stock imagery. */
+/* Fallback swatch styling for products that don't have a real photo yet. */
 const CATEGORY_STYLE = {
   Banarasi: { from: "#4A0E18", to: "#8A5A1E", weave: "#E7C878" },
   Kanjeevaram: { from: "#123A34", to: "#8A5A1E", weave: "#E7C878" },
   Cotton: { from: "#EFE3C8", to: "#C9A45C", weave: "#5B1420" },
   "Daily Wear": { from: "#6E2340", to: "#B4784A", weave: "#F1DDB0" },
+  "Raj Silks": { from: "#3A0D2E", to: "#B08328", weave: "#F1DDB0" },
 };
+const DEFAULT_STYLE = { from: "#4A0E18", to: "#8A5A1E", weave: "#E7C878" };
 
-const PRODUCTS = [
-  { id: 1, name: "Meenakari Zari Banarasi", category: "Banarasi", price: 8499, mrp: 10999, fabric: "Silk" },
-  { id: 2, name: "Rani Pink Katan Silk", category: "Banarasi", price: 12999, mrp: 16499, fabric: "Silk" },
-  { id: 3, name: "Temple Border Kanjeevaram", category: "Kanjeevaram", price: 15999, mrp: 19999, fabric: "Silk" },
-  { id: 4, name: "Mustard Checks Kanjeevaram", category: "Kanjeevaram", price: 13499, mrp: 17999, fabric: "Silk" },
-  { id: 5, name: "Handloom Ivory Cotton", category: "Cotton", price: 1899, mrp: 2399, fabric: "Cotton" },
-  { id: 6, name: "Block Print Chanderi Cotton", category: "Cotton", price: 2299, mrp: 2999, fabric: "Cotton" },
-  { id: 7, name: "Everyday Georgette", category: "Daily Wear", price: 1299, mrp: 1699, fabric: "Georgette" },
-  { id: 8, name: "Office Wear Linen", category: "Daily Wear", price: 1599, mrp: 1999, fabric: "Linen" },
-];
-
-const CATEGORIES = ["All", "Banarasi", "Kanjeevaram", "Cotton", "Daily Wear"];
+// Keep this in sync with the `categories` table in Supabase — adding a
+// category here changes the chip row; adding it in Supabase lets you
+// actually save products under it.
+const CATEGORIES = ["All", "Banarasi", "Kanjeevaram", "Cotton", "Daily Wear", "Raj Silks"];
 const FABRICS = ["Silk", "Cotton", "Georgette", "Linen"];
 
-/* Repeating gopuram-tower border strip, drawn once and tiled via CSS. */
 function GopuramBorder({ tone = GOLD, className = "" }) {
   return (
     <svg
@@ -78,8 +72,19 @@ function GopuramBorder({ tone = GOLD, className = "" }) {
   );
 }
 
-function FabricSwatch({ category }) {
-  const s = CATEGORY_STYLE[category];
+/* Shows a real product photo if one exists, otherwise the woven-gradient
+   placeholder — so the storefront looks intentional either way. */
+function ProductImage({ category, imageUrl }) {
+  const s = CATEGORY_STYLE[category] || DEFAULT_STYLE;
+
+  if (imageUrl) {
+    return (
+      <div className="relative w-full aspect-[3/4] overflow-hidden">
+        <img src={imageUrl} alt={category} className="w-full h-full object-cover" />
+      </div>
+    );
+  }
+
   return (
     <div
       className="relative w-full aspect-[3/4] overflow-hidden"
@@ -101,6 +106,10 @@ function FabricSwatch({ category }) {
 }
 
 export default function VastraMahal() {
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(false);
+
   const [cart, setCart] = useState({});
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -110,27 +119,54 @@ export default function VastraMahal() {
   const [maxPrice, setMaxPrice] = useState(20000);
   const [toast, setToast] = useState("");
 
+  // Fetch real products from Supabase (via our /api/products route) once,
+  // on first load. Filtering below happens client-side against this list.
+  useEffect(() => {
+    fetch("/api/products?pageSize=50")
+      .then((res) => {
+        if (!res.ok) throw new Error("Request failed");
+        return res.json();
+      })
+      .then((data) => {
+        // Map DB field names to what the UI expects:
+        // discount_price (DB) = original/MRP price shown struck-through
+        const mapped = (data.products || []).map((p) => ({
+          id: p.id,
+          name: p.name,
+          category: p.category,
+          price: Number(p.price),
+          mrp: p.discount_price ? Number(p.discount_price) : Number(p.price),
+          fabric: p.fabric,
+          imageUrl: p.image_urls && p.image_urls.length > 0 ? p.image_urls[0] : null,
+        }));
+        setProducts(mapped);
+      })
+      .catch(() => setLoadError(true))
+      .finally(() => setLoading(false));
+  }, []);
+
   const filtered = useMemo(() => {
-    return PRODUCTS.filter((p) => {
+    return products.filter((p) => {
       if (activeCategory !== "All" && p.category !== activeCategory) return false;
       if (query && !p.name.toLowerCase().includes(query.toLowerCase())) return false;
       if (selectedFabrics.length && !selectedFabrics.includes(p.fabric)) return false;
       if (p.price > maxPrice) return false;
       return true;
     });
-  }, [activeCategory, query, selectedFabrics, maxPrice]);
+  }, [products, activeCategory, query, selectedFabrics, maxPrice]);
 
   const cartItems = Object.entries(cart)
     .filter(([, qty]) => qty > 0)
-    .map(([id, qty]) => ({ ...PRODUCTS.find((p) => p.id === Number(id)), qty }));
+    .map(([id, qty]) => ({ ...products.find((p) => p.id === id), qty }))
+    .filter((item) => item.id);
 
   const cartCount = cartItems.reduce((sum, i) => sum + i.qty, 0);
   const cartTotal = cartItems.reduce((sum, i) => sum + i.qty * i.price, 0);
 
   const addToCart = (id) => {
     setCart((c) => ({ ...c, [id]: (c[id] || 0) + 1 }));
-    const p = PRODUCTS.find((x) => x.id === id);
-    setToast(`${p.name} added to cart`);
+    const p = products.find((x) => x.id === id);
+    setToast(`${p?.name || "Item"} added to cart`);
     window.clearTimeout(window.__toastTimer);
     window.__toastTimer = window.setTimeout(() => setToast(""), 1600);
   };
@@ -162,8 +198,12 @@ export default function VastraMahal() {
       "Namaste NandrajTex, I'd like to order:",
       ...lines,
       `Total: ₹${cartTotal.toLocaleString("en-IN")}`,
+      "",
+      `🔗 Browse more at: ${SITE_URL}`,
+      "",
+      "Please confirm availability and delivery timeline. Thank you!",
     ].join("\n");
-    return `https://wa.me/919148909543?text=${encodeURIComponent(text)}`;
+    return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`;
   }, [cartItems, cartTotal]);
 
   return (
@@ -173,7 +213,15 @@ export default function VastraMahal() {
       {/* HEADER */}
       <header className="sticky top-0 z-30" style={{ background: IVORY }}>
         <div className="flex items-center justify-between px-4 pt-4 pb-2">
-          <div className="flex items-center gap-2"> <img src={logo.src} alt="NandrajTex logo" className="h-8 w-8 rounded-full object-cover" /> <h1 style={{ fontFamily: "'Cormorant Garamond', serif", color: MAROON }} className="text-2xl tracking-[0.15em] font-semibold"> NANDRAJTEX </h1> </div>
+          <div className="flex items-center gap-3">
+            <img src={logo.src} alt="NandrajTex logo" className="h-12 w-12 rounded-full object-cover" />
+            <h1
+              style={{ fontFamily: "'Cormorant Garamond', serif", color: MAROON }}
+              className="text-3xl sm:text-4xl tracking-[0.15em] font-semibold"
+            >
+              NANDRAJTEX
+            </h1>
+          </div>
           <button
             onClick={() => setIsCartOpen(true)}
             className="relative rounded-full p-2"
@@ -192,7 +240,6 @@ export default function VastraMahal() {
           </button>
         </div>
 
-        {/* SEARCH + FILTER */}
         <div className="flex items-center gap-2 px-4 pb-3">
           <div className="flex-1 flex items-center gap-2 rounded-full px-3 py-2" style={{ background: CARD, border: `1px solid ${GOLD_SOFT}` }}>
             <Search size={16} color={GOLD} />
@@ -273,7 +320,10 @@ export default function VastraMahal() {
             Handwoven silks and everyday weaves, curated for this season.
           </p>
           <button
-            onClick={() => setActiveCategory("Banarasi")}
+            onClick={() => {
+              setActiveCategory("Banarasi");
+              document.getElementById("product-grid")?.scrollIntoView({ behavior: "smooth" });
+            }}
             className="mt-4 inline-flex items-center gap-1 text-sm font-semibold px-4 py-2 rounded-full"
             style={{ background: GOLD, color: MAROON_DEEP }}
           >
@@ -302,71 +352,84 @@ export default function VastraMahal() {
       </div>
 
       {/* PRODUCT GRID */}
-      <div className="grid grid-cols-2 gap-3 px-4">
-        {filtered.map((p) => {
-          const discount = Math.round(100 - (p.price / p.mrp) * 100);
-          const qtyInCart = cart[p.id] || 0;
-          return (
-            <div key={p.id} className="rounded-xl overflow-hidden relative" style={{ background: CARD, border: `1px solid ${GOLD_SOFT}` }}>
-              {discount > 0 && (
-                <span
-                  className="absolute top-2 left-2 z-10 text-[10px] font-bold px-2 py-1 rounded"
-                  style={{ background: CRIMSON, color: IVORY }}
-                >
-                  {discount}% OFF
-                </span>
-              )}
-              <FabricSwatch category={p.category} />
-              <div className="p-3">
-                <p className="text-[11px] uppercase tracking-wide" style={{ color: GOLD }}>
-                  {p.category}
-                </p>
-                <h3 className="text-sm font-semibold leading-snug mt-0.5" style={{ color: INK }}>
-                  {p.name}
-                </h3>
-                <div className="flex items-baseline gap-1.5 mt-1.5">
-                  <span className="text-sm font-bold" style={{ color: MAROON }}>
-                    ₹{p.price.toLocaleString("en-IN")}
+      <div id="product-grid" className="grid grid-cols-2 gap-3 px-4">
+        {loading && (
+          <p className="col-span-2 text-center py-16 text-sm" style={{ color: "#8A7E6E" }}>
+            Loading sarees...
+          </p>
+        )}
+
+        {!loading && loadError && (
+          <p className="col-span-2 text-center py-16 text-sm" style={{ color: CRIMSON }}>
+            Couldn't load products right now. Please refresh.
+          </p>
+        )}
+
+        {!loading &&
+          !loadError &&
+          filtered.map((p) => {
+            const discount = p.mrp > p.price ? Math.round(100 - (p.price / p.mrp) * 100) : 0;
+            const qtyInCart = cart[p.id] || 0;
+            return (
+              <div key={p.id} className="rounded-xl overflow-hidden relative" style={{ background: CARD, border: `1px solid ${GOLD_SOFT}` }}>
+                {discount > 0 && (
+                  <span
+                    className="absolute top-2 left-2 z-10 text-[10px] font-bold px-2 py-1 rounded"
+                    style={{ background: CRIMSON, color: IVORY }}
+                  >
+                    {discount}% OFF
                   </span>
-                  {discount > 0 && (
-                    <span className="text-xs line-through text-stone-400">₹{p.mrp.toLocaleString("en-IN")}</span>
+                )}
+                <ProductImage category={p.category} imageUrl={p.imageUrl} />
+                <div className="p-3">
+                  <p className="text-[11px] uppercase tracking-wide" style={{ color: GOLD }}>
+                    {p.category}
+                  </p>
+                  <h3 className="text-sm font-semibold leading-snug mt-0.5" style={{ color: INK }}>
+                    {p.name}
+                  </h3>
+                  <div className="flex items-baseline gap-1.5 mt-1.5">
+                    <span className="text-sm font-bold" style={{ color: MAROON }}>
+                      ₹{p.price.toLocaleString("en-IN")}
+                    </span>
+                    {discount > 0 && (
+                      <span className="text-xs line-through text-stone-400">₹{p.mrp.toLocaleString("en-IN")}</span>
+                    )}
+                  </div>
+
+                  {qtyInCart === 0 ? (
+                    <button
+                      onClick={() => addToCart(p.id)}
+                      className="mt-3 w-full text-xs font-semibold py-2 rounded-lg transition-transform active:scale-95"
+                      style={{ background: MAROON, color: IVORY }}
+                    >
+                      Add to Cart
+                    </button>
+                  ) : (
+                    <div className="mt-3 flex items-center justify-between rounded-lg overflow-hidden" style={{ border: `1px solid ${MAROON}` }}>
+                      <button onClick={() => changeQty(p.id, -1)} className="p-2" style={{ color: MAROON }}>
+                        <Minus size={14} />
+                      </button>
+                      <span className="text-sm font-semibold" style={{ color: MAROON }}>
+                        {qtyInCart}
+                      </span>
+                      <button onClick={() => changeQty(p.id, 1)} className="p-2" style={{ color: MAROON }}>
+                        <Plus size={14} />
+                      </button>
+                    </div>
                   )}
                 </div>
-
-                {qtyInCart === 0 ? (
-                  <button
-                    onClick={() => addToCart(p.id)}
-                    className="mt-3 w-full text-xs font-semibold py-2 rounded-lg transition-transform active:scale-95"
-                    style={{ background: MAROON, color: IVORY }}
-                  >
-                    Add to Cart
-                  </button>
-                ) : (
-                  <div className="mt-3 flex items-center justify-between rounded-lg overflow-hidden" style={{ border: `1px solid ${MAROON}` }}>
-                    <button onClick={() => changeQty(p.id, -1)} className="p-2" style={{ color: MAROON }}>
-                      <Minus size={14} />
-                    </button>
-                    <span className="text-sm font-semibold" style={{ color: MAROON }}>
-                      {qtyInCart}
-                    </span>
-                    <button onClick={() => changeQty(p.id, 1)} className="p-2" style={{ color: MAROON }}>
-                      <Plus size={14} />
-                    </button>
-                  </div>
-                )}
               </div>
-            </div>
-          );
-        })}
+            );
+          })}
 
-        {filtered.length === 0 && (
+        {!loading && !loadError && filtered.length === 0 && (
           <div className="col-span-2 text-center py-16 text-sm" style={{ color: "#8A7E6E" }}>
             No sarees match your search. Try clearing a filter.
           </div>
         )}
       </div>
 
-      {/* ADD-TO-CART TOAST */}
       {toast && (
         <div
           className="fixed bottom-5 left-1/2 -translate-x-1/2 z-50 text-xs font-medium px-4 py-2 rounded-full shadow-lg"
@@ -402,7 +465,7 @@ export default function VastraMahal() {
               {cartItems.map((i) => (
                 <div key={i.id} className="flex gap-3 rounded-lg p-2" style={{ background: CARD, border: `1px solid ${GOLD_SOFT}` }}>
                   <div className="w-16 shrink-0 rounded overflow-hidden">
-                    <FabricSwatch category={i.category} />
+                    <ProductImage category={i.category} imageUrl={i.imageUrl} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold truncate" style={{ color: INK }}>
