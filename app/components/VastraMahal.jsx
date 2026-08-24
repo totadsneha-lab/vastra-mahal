@@ -12,6 +12,8 @@ import {
   ChevronRight,
 } from "lucide-react";
 
+import logo from './logo.png';
+
 /* ------------------------------------------------------------------
    DESIGN TOKENS
    Ivory ground, deep maroon + antique gold + crimson accent.
