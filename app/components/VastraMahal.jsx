@@ -171,12 +171,7 @@ export default function VastraMahal() {
       {/* HEADER */}
       <header className="sticky top-0 z-30" style={{ background: IVORY }}>
         <div className="flex items-center justify-between px-4 pt-4 pb-2">
-          <h1
-            style={{ fontFamily: "'Cormorant Garamond', serif", color: MAROON }}
-            className="text-2xl tracking-[0.15em] font-semibold"
-          >
-            VASTRA MAHAL
-          </h1>
+          <div className="flex items-center gap-2"> <img src={logo.src} alt="NandrajTex logo" className="h-8 w-8 rounded-full object-cover" /> <h1 style={{ fontFamily: "'Cormorant Garamond', serif", color: MAROON }} className="text-2xl tracking-[0.15em] font-semibold"> NANDRAJTEX </h1> </div>
           <button
             onClick={() => setIsCartOpen(true)}
             className="relative rounded-full p-2"
