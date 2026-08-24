@@ -157,11 +157,11 @@ export default function VastraMahal() {
       (i) => `• ${i.name} x${i.qty} — ₹${(i.price * i.qty).toLocaleString("en-IN")}`
     );
     const text = [
-      "Namaste Vastra Mahal, I'd like to order:",
+      "Namaste NandrajTex, I'd like to order:",
       ...lines,
       `Total: ₹${cartTotal.toLocaleString("en-IN")}`,
     ].join("\n");
-    return `https://wa.me/910000000000?text=${encodeURIComponent(text)}`;
+    return `https://wa.me/919148909543?text=${encodeURIComponent(text)}`;
   }, [cartItems, cartTotal]);
 
   return (
