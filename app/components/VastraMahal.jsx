@@ -110,6 +110,11 @@ export default function VastraMahal() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState(false);
 
+  // Which color variant is currently selected for each product, e.g.
+  // { "product-uuid-1": "variant-uuid-3" }. Only products with variants
+  // appear here.
+  const [selectedColor, setSelectedColor] = useState({});
+
   const [cart, setCart] = useState({});
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -138,8 +143,26 @@ export default function VastraMahal() {
           mrp: p.discount_price ? Number(p.discount_price) : Number(p.price),
           fabric: p.fabric,
           imageUrl: p.image_urls && p.image_urls.length > 0 ? p.image_urls[0] : null,
+          variants: (p.product_variants || []).map((v) => ({
+            id: v.id,
+            colorName: v.color_name,
+            colorHex: v.color_hex,
+            imageUrl: v.image_urls && v.image_urls.length > 0 ? v.image_urls[0] : null,
+          })),
         }));
         setProducts(mapped);
+
+        // Default each product with colors to its first color, so a
+        // photo and swatch are already selected when the page loads.
+        setSelectedColor((prev) => {
+          const next = { ...prev };
+          mapped.forEach((p) => {
+            if (p.variants.length > 0 && !next[p.id]) {
+              next[p.id] = p.variants[0].id;
+            }
+          });
+          return next;
+        });
       })
       .catch(() => setLoadError(true))
       .finally(() => setLoading(false));
@@ -155,33 +178,58 @@ export default function VastraMahal() {
     });
   }, [products, activeCategory, query, selectedFabrics, maxPrice]);
 
+  // A cart key is "productId" alone, or "productId::variantId" when the
+  // product has colors — that's what keeps a Maroon and a Green of the
+  // same saree as two separate lines in the cart.
+  const makeCartKey = (productId, variantId) => (variantId ? `${productId}::${variantId}` : productId);
+
   const cartItems = Object.entries(cart)
     .filter(([, qty]) => qty > 0)
-    .map(([id, qty]) => ({ ...products.find((p) => p.id === id), qty }))
-    .filter((item) => item.id);
+    .map(([key, qty]) => {
+      const [productId, variantId] = key.split("::");
+      const product = products.find((p) => p.id === productId);
+      if (!product) return null;
+      const variant = variantId ? product.variants.find((v) => v.id === variantId) : null;
+      return {
+        cartKey: key,
+        productId,
+        variantId: variantId || null,
+        qty,
+        name: product.name,
+        category: product.category,
+        price: product.price,
+        colorName: variant ? variant.colorName : null,
+        imageUrl: (variant && variant.imageUrl) || product.imageUrl,
+      };
+    })
+    .filter(Boolean);
 
   const cartCount = cartItems.reduce((sum, i) => sum + i.qty, 0);
   const cartTotal = cartItems.reduce((sum, i) => sum + i.qty * i.price, 0);
 
-  const addToCart = (id) => {
-    setCart((c) => ({ ...c, [id]: (c[id] || 0) + 1 }));
-    const p = products.find((x) => x.id === id);
-    setToast(`${p?.name || "Item"} added to cart`);
+  const addToCart = (productId) => {
+    const variantId = selectedColor[productId] || null;
+    const key = makeCartKey(productId, variantId);
+    setCart((c) => ({ ...c, [key]: (c[key] || 0) + 1 }));
+    const p = products.find((x) => x.id === productId);
+    const variant = variantId ? p?.variants.find((v) => v.id === variantId) : null;
+    const label = variant ? `${p?.name} (${variant.colorName})` : p?.name || "Item";
+    setToast(`${label} added to cart`);
     window.clearTimeout(window.__toastTimer);
     window.__toastTimer = window.setTimeout(() => setToast(""), 1600);
   };
 
-  const changeQty = (id, delta) => {
+  const changeQty = (key, delta) => {
     setCart((c) => {
-      const next = Math.max(0, (c[id] || 0) + delta);
-      return { ...c, [id]: next };
+      const next = Math.max(0, (c[key] || 0) + delta);
+      return { ...c, [key]: next };
     });
   };
 
-  const removeItem = (id) => {
+  const removeItem = (key) => {
     setCart((c) => {
       const next = { ...c };
-      delete next[id];
+      delete next[key];
       return next;
     });
   };
@@ -191,18 +239,33 @@ export default function VastraMahal() {
   };
 
   const whatsappHref = useMemo(() => {
-    const lines = cartItems.map(
-      (i) => `• ${i.name} x${i.qty} — ₹${(i.price * i.qty).toLocaleString("en-IN")}`
-    );
-    const text = [
-      "Namaste NandrajTex, I'd like to order:",
-      ...lines,
-      `Total: ₹${cartTotal.toLocaleString("en-IN")}`,
-      "",
-      `🔗 Browse more at: ${SITE_URL}`,
-      "",
-      "Please confirm availability and delivery timeline. Thank you!",
-    ].join("\n");
+    const now = new Date();
+    const dateStr = now.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+    const timeStr = now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
+
+    const lines = ["🛍️ *NandrajTex — New Order*", `📅 ${dateStr}, ${timeStr}`, "", "*Items:*"];
+
+    cartItems.forEach((i, idx) => {
+      lines.push(`${idx + 1}. *${i.name}*${i.colorName ? ` (${i.colorName})` : ""}`);
+      lines.push(`    Qty: ${i.qty} × ₹${i.price.toLocaleString("en-IN")} = ₹${(i.price * i.qty).toLocaleString("en-IN")}`);
+      // WhatsApp shows an inline photo preview for the first image link in a
+      // message — later links stay as plain tappable links, not previews.
+      // That's a WhatsApp limitation, not something this code controls.
+      if (i.imageUrl) {
+        lines.push(`    📸 Photo: ${i.imageUrl}`);
+      }
+      lines.push("");
+    });
+
+    lines.push("――――――――――――――――");
+    lines.push(`*Total: ₹${cartTotal.toLocaleString("en-IN")}*`);
+    lines.push("――――――――――――――――");
+    lines.push("");
+    lines.push(`🔗 Full catalog: ${SITE_URL}`);
+    lines.push("");
+    //lines.push("Please confirm availability and delivery timeline. Thank you! 🙏");
+
+    const text = lines.join("\n");
     return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`;
   }, [cartItems, cartTotal]);
 
@@ -369,7 +432,12 @@ export default function VastraMahal() {
           !loadError &&
           filtered.map((p) => {
             const discount = p.mrp > p.price ? Math.round(100 - (p.price / p.mrp) * 100) : 0;
-            const qtyInCart = cart[p.id] || 0;
+            const activeVariantId = selectedColor[p.id] || null;
+            const activeVariant = activeVariantId ? p.variants.find((v) => v.id === activeVariantId) : null;
+            const displayImage = (activeVariant && activeVariant.imageUrl) || p.imageUrl;
+            const cartKey = activeVariantId ? `${p.id}::${activeVariantId}` : p.id;
+            const qtyInCart = cart[cartKey] || 0;
+
             return (
               <div key={p.id} className="rounded-xl overflow-hidden relative" style={{ background: CARD, border: `1px solid ${GOLD_SOFT}` }}>
                 {discount > 0 && (
@@ -380,7 +448,7 @@ export default function VastraMahal() {
                     {discount}% OFF
                   </span>
                 )}
-                <ProductImage category={p.category} imageUrl={p.imageUrl} />
+                <ProductImage category={p.category} imageUrl={displayImage} />
                 <div className="p-3">
                   <p className="text-[11px] uppercase tracking-wide" style={{ color: GOLD }}>
                     {p.category}
@@ -397,6 +465,26 @@ export default function VastraMahal() {
                     )}
                   </div>
 
+                  {/* COLOR SWATCHES — only shown if this product has variants */}
+                  {p.variants.length > 0 && (
+                    <div className="flex items-center gap-1.5 mt-2">
+                      {p.variants.map((v) => (
+                        <button
+                          key={v.id}
+                          onClick={() => setSelectedColor((prev) => ({ ...prev, [p.id]: v.id }))}
+                          aria-label={v.colorName}
+                          title={v.colorName}
+                          className="w-5 h-5 rounded-full transition-transform"
+                          style={{
+                            background: v.colorHex,
+                            border: activeVariantId === v.id ? `2px solid ${MAROON}` : `1px solid ${GOLD_SOFT}`,
+                            transform: activeVariantId === v.id ? "scale(1.15)" : "scale(1)",
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
+
                   {qtyInCart === 0 ? (
                     <button
                       onClick={() => addToCart(p.id)}
@@ -407,13 +495,13 @@ export default function VastraMahal() {
                     </button>
                   ) : (
                     <div className="mt-3 flex items-center justify-between rounded-lg overflow-hidden" style={{ border: `1px solid ${MAROON}` }}>
-                      <button onClick={() => changeQty(p.id, -1)} className="p-2" style={{ color: MAROON }}>
+                      <button onClick={() => changeQty(cartKey, -1)} className="p-2" style={{ color: MAROON }}>
                         <Minus size={14} />
                       </button>
                       <span className="text-sm font-semibold" style={{ color: MAROON }}>
                         {qtyInCart}
                       </span>
-                      <button onClick={() => changeQty(p.id, 1)} className="p-2" style={{ color: MAROON }}>
+                      <button onClick={() => changeQty(cartKey, 1)} className="p-2" style={{ color: MAROON }}>
                         <Plus size={14} />
                       </button>
                     </div>
@@ -463,30 +551,31 @@ export default function VastraMahal() {
                 </p>
               )}
               {cartItems.map((i) => (
-                <div key={i.id} className="flex gap-3 rounded-lg p-2" style={{ background: CARD, border: `1px solid ${GOLD_SOFT}` }}>
+                <div key={i.cartKey} className="flex gap-3 rounded-lg p-2" style={{ background: CARD, border: `1px solid ${GOLD_SOFT}` }}>
                   <div className="w-16 shrink-0 rounded overflow-hidden">
                     <ProductImage category={i.category} imageUrl={i.imageUrl} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold truncate" style={{ color: INK }}>
                       {i.name}
+                      {i.colorName && <span className="font-normal text-stone-500"> — {i.colorName}</span>}
                     </p>
                     <p className="text-xs" style={{ color: GOLD }}>
                       ₹{i.price.toLocaleString("en-IN")} × {i.qty}
                     </p>
                     <div className="flex items-center justify-between mt-1.5">
                       <div className="flex items-center gap-2 rounded-lg overflow-hidden" style={{ border: `1px solid ${MAROON}` }}>
-                        <button onClick={() => changeQty(i.id, -1)} className="p-1" style={{ color: MAROON }}>
+                        <button onClick={() => changeQty(i.cartKey, -1)} className="p-1" style={{ color: MAROON }}>
                           <Minus size={12} />
                         </button>
                         <span className="text-xs font-semibold" style={{ color: MAROON }}>
                           {i.qty}
                         </span>
-                        <button onClick={() => changeQty(i.id, 1)} className="p-1" style={{ color: MAROON }}>
+                        <button onClick={() => changeQty(i.cartKey, 1)} className="p-1" style={{ color: MAROON }}>
                           <Plus size={12} />
                         </button>
                       </div>
-                      <button onClick={() => removeItem(i.id)} aria-label="Remove item">
+                      <button onClick={() => removeItem(i.cartKey)} aria-label="Remove item">
                         <Trash2 size={14} color={CRIMSON} />
                       </button>
                     </div>
