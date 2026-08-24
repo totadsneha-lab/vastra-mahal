@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "NnadrajTex",
+  title: "NandrajTex",
   description: "Handwoven Banarasi, Kanjeevaram, and everyday sarees.",
 };
 
