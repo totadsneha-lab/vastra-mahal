@@ -30,7 +30,7 @@ const CRIMSON = "#A22C2C";
 const WHATSAPP_NUMBER = "919148909543";
 
 // Your live site link — used in the WhatsApp order message
-const SITE_URL = "https://nandrajtex.vercel.app";
+const SITE_URL = "https://nandrajtexsarees.vercel.app";
 
 const FONTS = `
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Manrope:wght@400;500;600;700&display=swap');
