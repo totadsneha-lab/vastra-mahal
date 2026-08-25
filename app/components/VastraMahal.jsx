@@ -30,7 +30,7 @@ const CRIMSON = "#A22C2C";
 const WHATSAPP_NUMBER = "919148909543";
 
 // Your live site link — used in the WhatsApp order message
-const SITE_URL = "https://vastra-mahal.vercel.app";
+const SITE_URL = "https://ntexonline.vercel.app";
 
 const FONTS = `
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Manrope:wght@400;500;600;700&display=swap');
@@ -314,12 +314,23 @@ export default function VastraMahal() {
     setSelectedFabrics((cur) => (cur.includes(f) ? cur.filter((x) => x !== f) : [...cur, f]));
   };
 
+  // Written as escape codes (not literal emoji characters) so the text
+  // can never get corrupted into "?" by an editor's save encoding —
+  // escape codes are plain ASCII in the source file either way.
+  const EMOJI = {
+    cart: "\u{1F6D2}",
+    calendar: "\u{1F4C5}",
+    camera: "\u{1F4F8}",
+    link: "\u{1F517}",
+    pray: "\u{1F64F}",
+  };
+
   const whatsappHref = useMemo(() => {
     const now = new Date();
     const dateStr = now.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
     const timeStr = now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" });
 
-    const lines = ["🛍️ *NandrajTex — New Order*", `📅 ${dateStr}, ${timeStr}`, "", "*Items:*"];
+    const lines = [`${EMOJI.cart} *NandrajTex — New Order*`, `${EMOJI.calendar} ${dateStr}, ${timeStr}`, "", "*Items:*"];
 
     cartItems.forEach((i, idx) => {
       lines.push(`${idx + 1}. *${i.name}*${i.colorName ? ` (${i.colorName})` : ""}`);
@@ -328,18 +339,18 @@ export default function VastraMahal() {
       // message — later links stay as plain tappable links, not previews.
       // That's a WhatsApp limitation, not something this code controls.
       if (i.imageUrl) {
-        lines.push(`    📸 Photo: ${i.imageUrl}`);
+        lines.push(`    ${EMOJI.camera} Photo: ${i.imageUrl}`);
       }
       lines.push("");
     });
 
-    lines.push("――――――――――――――――");
+    lines.push("--------------------------------");
     lines.push(`*Total: ₹${cartTotal.toLocaleString("en-IN")}*`);
-    lines.push("――――――――――――――――");
+    lines.push("--------------------------------");
     lines.push("");
-    lines.push(`🔗 Full catalog: ${SITE_URL}`);
+    lines.push(`${EMOJI.link} Full catalog: ${SITE_URL}`);
     lines.push("");
-    lines.push("Please confirm availability and delivery timeline. Thank you! 🙏");
+    //lines.push("Please confirm availability and delivery timeline. Thank you! 🙏");
 
     const text = lines.join("\n");
     return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`;
