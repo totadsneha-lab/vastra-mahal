@@ -52,7 +52,7 @@ const DEFAULT_STYLE = { from: "#4A0E18", to: "#8A5A1E", weave: "#E7C878" };
 // Keep this in sync with the `categories` table in Supabase — adding a
 // category here changes the chip row; adding it in Supabase lets you
 // actually save products under it.
-const CATEGORIES = ["All", "Raj Silks", "Handloom Sarees"];
+const CATEGORIES = ["All", "Handloom Sarees"];
 const FABRICS = ["Silk", "Silk Cotton", "Georgette", "Cotton"];
 
 function GopuramBorder({ tone = GOLD, className = "" }) {
