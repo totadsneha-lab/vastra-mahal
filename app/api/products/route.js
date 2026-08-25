@@ -52,9 +52,10 @@ export async function GET(request) {
     // count matching the filters, so the frontend can render page numbers.
     let query = supabase
       .from("products")
-      .select("id, name, description, category, price, discount_price, image_urls, stock_quantity, fabric", {
-        count: "exact",
-      })
+      .select(
+        "id, name, description, category, price, discount_price, image_urls, stock_quantity, fabric, product_variants(id, color_name, color_hex, image_urls, stock_quantity)",
+        { count: "exact" }
+      )
       .eq("is_active", true);
 
     if (category) {
