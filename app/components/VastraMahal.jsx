@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import {
   Search,
   SlidersHorizontal,
@@ -34,6 +34,9 @@ const SITE_URL = "https://vastra-mahal.vercel.app";
 
 const FONTS = `
 @import url('https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,500;0,600;1,500&family=Manrope:wght@400;500;600;700&display=swap');
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 `;
 
 /* Fallback swatch styling for products that don't have a real photo yet. */
@@ -49,7 +52,7 @@ const DEFAULT_STYLE = { from: "#4A0E18", to: "#8A5A1E", weave: "#E7C878" };
 // Keep this in sync with the `categories` table in Supabase — adding a
 // category here changes the chip row; adding it in Supabase lets you
 // actually save products under it.
-const CATEGORIES = ["All", "Banarasi", "Kanjeevaram", "Cotton", "Daily Wear", "Raj Silks","Crepe silk"];
+const CATEGORIES = ["All", "Banarasi", "Kanjeevaram", "Cotton", "Daily Wear", "Raj Silks", "Crepe silk", "Handloom Sarees"];
 const FABRICS = ["Silk", "Cotton", "Georgette", "Linen"];
 
 function GopuramBorder({ tone = GOLD, className = "" }) {
@@ -72,19 +75,9 @@ function GopuramBorder({ tone = GOLD, className = "" }) {
   );
 }
 
-/* Shows a real product photo if one exists, otherwise the woven-gradient
-   placeholder — so the storefront looks intentional either way. */
-function ProductImage({ category, imageUrl }) {
+/* Woven-gradient placeholder shown when a product has no real photos yet. */
+function FallbackSwatch({ category }) {
   const s = CATEGORY_STYLE[category] || DEFAULT_STYLE;
-
-  if (imageUrl) {
-    return (
-      <div className="relative w-full aspect-[3/4] overflow-hidden">
-        <img src={imageUrl} alt={category} className="w-full h-full object-cover" />
-      </div>
-    );
-  }
-
   return (
     <div
       className="relative w-full aspect-[3/4] overflow-hidden"
@@ -101,6 +94,89 @@ function ProductImage({ category, imageUrl }) {
       <div className="absolute bottom-0 left-0 right-0">
         <GopuramBorder tone={s.weave} />
       </div>
+    </div>
+  );
+}
+
+/* Swipeable multi-photo gallery for a product card — swipe left/right
+   through every photo of the currently selected color, with dot
+   indicators showing position. Falls back to the woven placeholder
+   when there are no real photos yet. */
+function ProductGallery({ category, images }) {
+  const [index, setIndex] = useState(0);
+  const containerRef = useRef(null);
+  const validImages = (images || []).filter(Boolean);
+
+  // When the product's photo set changes (e.g. switching color), snap
+  // back to the first photo instead of staying on whatever index the
+  // previous color happened to be scrolled to.
+  useEffect(() => {
+    setIndex(0);
+    if (containerRef.current) {
+      containerRef.current.scrollTo({ left: 0 });
+    }
+  }, [images]);
+
+  if (validImages.length === 0) {
+    return <FallbackSwatch category={category} />;
+  }
+
+  const handleScroll = (e) => {
+    const el = e.currentTarget;
+    const i = Math.round(el.scrollLeft / el.clientWidth);
+    setIndex(i);
+  };
+
+  const goTo = (i) => {
+    const el = containerRef.current;
+    if (el) el.scrollTo({ left: i * el.clientWidth, behavior: "smooth" });
+    setIndex(i);
+  };
+
+  return (
+    <div className="relative w-full aspect-[3/4] overflow-hidden">
+      <div
+        ref={containerRef}
+        onScroll={handleScroll}
+        className="flex w-full h-full overflow-x-auto snap-x snap-mandatory no-scrollbar"
+      >
+        {validImages.map((url, i) => (
+          <img
+            key={i}
+            src={url}
+            alt={`${category} photo ${i + 1}`}
+            className="w-full h-full flex-shrink-0 snap-center object-cover"
+          />
+        ))}
+      </div>
+
+      {validImages.length > 1 && (
+        <div className="absolute bottom-2 left-0 right-0 flex justify-center gap-1.5">
+          {validImages.map((_, i) => (
+            <button
+              key={i}
+              onClick={() => goTo(i)}
+              aria-label={`Photo ${i + 1}`}
+              className="w-1.5 h-1.5 rounded-full transition-all"
+              style={{
+                background: i === index ? "#FFFFFF" : "rgba(255,255,255,0.55)",
+                width: i === index ? 14 : 6,
+              }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* Small, non-swipeable single photo — used for the compact cart drawer
+   thumbnail where a full gallery would be too cramped to be useful. */
+function ThumbImage({ category, imageUrl }) {
+  if (!imageUrl) return <FallbackSwatch category={category} />;
+  return (
+    <div className="relative w-full aspect-[3/4] overflow-hidden">
+      <img src={imageUrl} alt={category} className="w-full h-full object-cover" />
     </div>
   );
 }
@@ -142,12 +218,12 @@ export default function VastraMahal() {
           price: Number(p.price),
           mrp: p.discount_price ? Number(p.discount_price) : Number(p.price),
           fabric: p.fabric,
-          imageUrl: p.image_urls && p.image_urls.length > 0 ? p.image_urls[0] : null,
+          imageUrls: p.image_urls || [],
           variants: (p.product_variants || []).map((v) => ({
             id: v.id,
             colorName: v.color_name,
             colorHex: v.color_hex,
-            imageUrl: v.image_urls && v.image_urls.length > 0 ? v.image_urls[0] : null,
+            imageUrls: v.image_urls || [],
           })),
         }));
         setProducts(mapped);
@@ -199,7 +275,7 @@ export default function VastraMahal() {
         category: product.category,
         price: product.price,
         colorName: variant ? variant.colorName : null,
-        imageUrl: (variant && variant.imageUrl) || product.imageUrl,
+        imageUrl: (variant && variant.imageUrls[0]) || product.imageUrls[0] || null,
       };
     })
     .filter(Boolean);
@@ -263,7 +339,7 @@ export default function VastraMahal() {
     lines.push("");
     lines.push(`🔗 Full catalog: ${SITE_URL}`);
     lines.push("");
-    //lines.push("Please confirm availability and delivery timeline. Thank you! 🙏");
+    lines.push("Please confirm availability and delivery timeline. Thank you! 🙏");
 
     const text = lines.join("\n");
     return `https://wa.me/${WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`;
@@ -434,7 +510,7 @@ export default function VastraMahal() {
             const discount = p.mrp > p.price ? Math.round(100 - (p.price / p.mrp) * 100) : 0;
             const activeVariantId = selectedColor[p.id] || null;
             const activeVariant = activeVariantId ? p.variants.find((v) => v.id === activeVariantId) : null;
-            const displayImage = (activeVariant && activeVariant.imageUrl) || p.imageUrl;
+            const displayImages = (activeVariant && activeVariant.imageUrls.length > 0) ? activeVariant.imageUrls : p.imageUrls;
             const cartKey = activeVariantId ? `${p.id}::${activeVariantId}` : p.id;
             const qtyInCart = cart[cartKey] || 0;
 
@@ -448,7 +524,7 @@ export default function VastraMahal() {
                     {discount}% OFF
                   </span>
                 )}
-                <ProductImage category={p.category} imageUrl={displayImage} />
+                <ProductGallery category={p.category} images={displayImages} />
                 <div className="p-3">
                   <p className="text-[11px] uppercase tracking-wide" style={{ color: GOLD }}>
                     {p.category}
@@ -553,7 +629,7 @@ export default function VastraMahal() {
               {cartItems.map((i) => (
                 <div key={i.cartKey} className="flex gap-3 rounded-lg p-2" style={{ background: CARD, border: `1px solid ${GOLD_SOFT}` }}>
                   <div className="w-16 shrink-0 rounded overflow-hidden">
-                    <ProductImage category={i.category} imageUrl={i.imageUrl} />
+                    <ThumbImage category={i.category} imageUrl={i.imageUrl} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold truncate" style={{ color: INK }}>
