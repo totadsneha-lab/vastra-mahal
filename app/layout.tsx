@@ -21,13 +21,11 @@ const geistMono = Geist_Mono({
 
 export const metadata = {
   title: "NandrajTex — Pure Handloom Sarees",
-  description: "Handwoven Banarasi, Kanjeevaram, and everyday handloom sarees. Shop online or order via WhatsApp.",
+  description: "Handwoven, pure handloom sarees — sourced directly from India's weaving clusters. Shop online or order via WhatsApp.",
 
-  // Open Graph tags — this is what WhatsApp, Instagram, Facebook, and
-  // most messaging apps read to build the preview card.
   openGraph: {
     title: "NandrajTex — Pure Handloom Sarees",
-    description: "Handwoven Banarasi, Kanjeevaram, and everyday handloom sarees.",
+    description: "Handwoven, pure handloom sarees — sourced directly from India's weaving clusters.",
     url: "https://ntexonline.vercel.app",
     siteName: "NandrajTex",
     images: [
@@ -42,15 +40,14 @@ export const metadata = {
     type: "website",
   },
 
-  // Twitter/X uses its own tag set, separate from Open Graph — this
-  // makes the preview look right there too, just in case.
   twitter: {
     card: "summary_large_image",
     title: "NandrajTex — Pure Handloom Sarees",
-    description: "Handwoven Banarasi, Kanjeevaram, and everyday handloom sarees.",
+    description: "Handwoven, pure handloom sarees — sourced directly from India's weaving clusters.",
     images: ["https://ntexonline.vercel.app/og-image.png"],
   },
 };
+
 
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
