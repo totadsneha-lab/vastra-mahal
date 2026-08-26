@@ -27,7 +27,7 @@ const GOLD_SOFT = "#D9B978";
 const CRIMSON = "#A22C2C";
 
 // ⚠️ Replace with your real WhatsApp Business number (country code + number, digits only)
-const WHATSAPP_NUMBER = "919148909543";
+const WHATSAPP_NUMBER = "917204091492";
 
 // Your live site link — used in the WhatsApp order message
 const SITE_URL = "https://ntexonline.vercel.app";
@@ -461,23 +461,23 @@ export default function VastraMahal() {
       >
         <div className="px-5 pt-6 pb-5 relative z-10">
           <p className="text-xs tracking-[0.3em] uppercase mb-2" style={{ color: GOLD_SOFT }}>
-            New Arrivals
+            Pure handloom
           </p>
           <h2 style={{ fontFamily: "'Cormorant Garamond', serif" }} className="text-3xl leading-tight text-[#FBF6EE] italic">
-            Festive Collections
+            Handloom, always.
           </h2>
           <p className="text-sm mt-2 max-w-[220px]" style={{ color: "#E9D9C4" }}>
-            Handwoven silks and everyday weaves, curated for this season.
+            Celebrating the craft of the handloom saree, one weave at a time.
           </p>
           <button
             onClick={() => {
-              setActiveCategory("Banarasi");
+              setActiveCategory("Handloom Sarees");
               document.getElementById("product-grid")?.scrollIntoView({ behavior: "smooth" });
             }}
             className="mt-4 inline-flex items-center gap-1 text-sm font-semibold px-4 py-2 rounded-full"
             style={{ background: GOLD, color: MAROON_DEEP }}
           >
-            Shop Banarasi <ChevronRight size={14} />
+            Shop handloom sarees <ChevronRight size={14} />
           </button>
         </div>
         <GopuramBorder tone={GOLD_SOFT} className="absolute bottom-0 left-0 right-0" />
