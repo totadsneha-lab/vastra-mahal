@@ -11,6 +11,7 @@ import {
   MessageCircle,
   Trash2,
   ChevronRight,
+  Heart,
 } from "lucide-react";
 import logo from "./images/logo.png";
 
@@ -200,6 +201,36 @@ export default function VastraMahal() {
   const [maxPrice, setMaxPrice] = useState(20000);
   const [toast, setToast] = useState("");
 
+  // Wishlist — an array of product ids, saved in the browser's own
+  // storage (not Supabase) so it's specific to this device/customer
+  // without needing any login system.
+  const [wishlist, setWishlist] = useState([]);
+  const [showWishlistOnly, setShowWishlistOnly] = useState(false);
+
+  // Load any previously saved wishlist once, on first visit to this page.
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("nandrajtex-wishlist");
+      if (saved) setWishlist(JSON.parse(saved));
+    } catch {
+      // If localStorage is unavailable (private browsing, etc.), the
+      // wishlist just won't persist — not worth failing the page for.
+    }
+  }, []);
+
+  // Save on every change so it survives a refresh or closing the tab.
+  useEffect(() => {
+    try {
+      window.localStorage.setItem("nandrajtex-wishlist", JSON.stringify(wishlist));
+    } catch {
+      // Same — silently skip if storage isn't available.
+    }
+  }, [wishlist]);
+
+  const toggleWishlist = (productId) => {
+    setWishlist((cur) => (cur.includes(productId) ? cur.filter((id) => id !== productId) : [...cur, productId]));
+  };
+
   // Fetch real products from Supabase (via our /api/products route) once,
   // on first load. Filtering below happens client-side against this list.
   useEffect(() => {
@@ -246,13 +277,14 @@ export default function VastraMahal() {
 
   const filtered = useMemo(() => {
     return products.filter((p) => {
+      if (showWishlistOnly && !wishlist.includes(p.id)) return false;
       if (activeCategory !== "All" && p.category !== activeCategory) return false;
       if (query && !p.name.toLowerCase().includes(query.toLowerCase())) return false;
       if (selectedFabrics.length && !selectedFabrics.includes(p.fabric)) return false;
       if (p.price > maxPrice) return false;
       return true;
     });
-  }, [products, activeCategory, query, selectedFabrics, maxPrice]);
+  }, [products, activeCategory, query, selectedFabrics, maxPrice, showWishlistOnly, wishlist]);
 
   // A cart key is "productId" alone, or "productId::variantId" when the
   // product has colors — that's what keeps a Maroon and a Green of the
@@ -372,22 +404,40 @@ export default function VastraMahal() {
               NANDRAJTEX
             </h1>
           </div>
-          <button
-            onClick={() => setIsCartOpen(true)}
-            className="relative rounded-full p-2"
-            style={{ background: MAROON }}
-            aria-label="Open cart"
-          >
-            <ShoppingBag size={18} color={IVORY} />
-            {cartCount > 0 && (
-              <span
-                className="absolute -top-1 -right-1 text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center"
-                style={{ background: CRIMSON, color: IVORY }}
-              >
-                {cartCount}
-              </span>
-            )}
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setShowWishlistOnly((v) => !v)}
+              className="relative rounded-full p-2"
+              style={{ background: showWishlistOnly ? MAROON : CARD, border: `1px solid ${GOLD_SOFT}` }}
+              aria-label="View wishlist"
+            >
+              <Heart size={18} color={showWishlistOnly ? IVORY : MAROON} fill={showWishlistOnly ? IVORY : "none"} />
+              {wishlist.length > 0 && (
+                <span
+                  className="absolute -top-1 -right-1 text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center"
+                  style={{ background: CRIMSON, color: IVORY }}
+                >
+                  {wishlist.length}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => setIsCartOpen(true)}
+              className="relative rounded-full p-2"
+              style={{ background: MAROON }}
+              aria-label="Open cart"
+            >
+              <ShoppingBag size={18} color={IVORY} />
+              {cartCount > 0 && (
+                <span
+                  className="absolute -top-1 -right-1 text-[10px] font-bold rounded-full w-4 h-4 flex items-center justify-center"
+                  style={{ background: CRIMSON, color: IVORY }}
+                >
+                  {cartCount}
+                </span>
+              )}
+            </button>
+          </div>
         </div>
 
         <div className="flex items-center gap-2 px-4 pb-3">
@@ -535,6 +585,18 @@ export default function VastraMahal() {
                     {discount}% OFF
                   </span>
                 )}
+                <button
+                  onClick={() => toggleWishlist(p.id)}
+                  aria-label={wishlist.includes(p.id) ? "Remove from wishlist" : "Add to wishlist"}
+                  className="absolute top-2 right-2 z-10 rounded-full p-1.5"
+                  style={{ background: "rgba(255,255,255,0.85)" }}
+                >
+                  <Heart
+                    size={16}
+                    color={CRIMSON}
+                    fill={wishlist.includes(p.id) ? CRIMSON : "none"}
+                  />
+                </button>
                 <ProductGallery category={p.category} images={displayImages} />
                 <div className="p-3">
                   <p className="text-[11px] uppercase tracking-wide" style={{ color: GOLD }}>
@@ -600,7 +662,9 @@ export default function VastraMahal() {
 
         {!loading && !loadError && filtered.length === 0 && (
           <div className="col-span-2 text-center py-16 text-sm" style={{ color: "#8A7E6E" }}>
-            No sarees match your search. Try clearing a filter.
+            {showWishlistOnly
+              ? "No sarees in your wishlist yet — tap the heart on any saree to save it here."
+              : "No sarees match your search. Try clearing a filter."}
           </div>
         )}
       </div>
